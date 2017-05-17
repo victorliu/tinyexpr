@@ -386,28 +386,28 @@ void test_functions() {
 }
 
 
-double sum0() {
+double sum0(void *p) {
     return 6;
 }
-double sum1(double a) {
+double sum1(void *p, double a) {
     return a * 2;
 }
-double sum2(double a, double b) {
+double sum2(void *p, double a, double b) {
     return a + b;
 }
-double sum3(double a, double b, double c) {
+double sum3(void *p, double a, double b, double c) {
     return a + b + c;
 }
-double sum4(double a, double b, double c, double d) {
+double sum4(void *p, double a, double b, double c, double d) {
     return a + b + c + d;
 }
-double sum5(double a, double b, double c, double d, double e) {
+double sum5(void *p, double a, double b, double c, double d, double e) {
     return a + b + c + d + e;
 }
-double sum6(double a, double b, double c, double d, double e, double f) {
+double sum6(void *p, double a, double b, double c, double d, double e, double f) {
     return a + b + c + d + e + f;
 }
-double sum7(double a, double b, double c, double d, double e, double f, double g) {
+double sum7(void *p, double a, double b, double c, double d, double e, double f, double g) {
     return a + b + c + d + e + f + g;
 }
 
@@ -494,10 +494,10 @@ void test_closure() {
     double c[] = {5,6,7,8,9};
 
     te_variable lookup[] = {
-        {"c0", clo0, TE_CLOSURE0, &extra},
-        {"c1", clo1, TE_CLOSURE1, &extra},
-        {"c2", clo2, TE_CLOSURE2, &extra},
-        {"cell", cell, TE_CLOSURE1, c},
+        {"c0", clo0, TE_FUNCTION0, &extra},
+        {"c1", clo1, TE_FUNCTION1, &extra},
+        {"c2", clo2, TE_FUNCTION2, &extra},
+        {"cell", cell, TE_FUNCTION1, c},
     };
 
     test_case cases[] = {
