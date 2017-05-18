@@ -77,9 +77,9 @@ static int lfails = 0;
 /* Display the test results. */
 #define lresults() do {\
     if (lfails == 0) {\
-        printf("ALL TESTS PASSED (%d/%d)\n", ltests, ltests);\
+        printf("ALL TESTS PASSED (%d/%d)\n", ltests, ltests);fflush(stdout);\
     } else {\
-        printf("SOME TESTS FAILED (%d/%d)\n", ltests-lfails, ltests);\
+        printf("SOME TESTS FAILED (%d/%d)\n", ltests-lfails, ltests);fflush(stdout);\
     }\
 } while (0)
 
@@ -89,11 +89,11 @@ static int lfails = 0;
     const int ts = ltests;\
     const int fs = lfails;\
     const clock_t start = clock();\
-    printf("\t%-14s", name);\
+    printf("\t%-14s", name);fflush(stdout);\
     test();\
     printf("pass:%2d   fail:%2d   %4dms\n",\
             (ltests-ts)-(lfails-fs), lfails-fs,\
-            (int)((clock() - start) * 1000 / CLOCKS_PER_SEC));\
+            (int)((clock() - start) * 1000 / CLOCKS_PER_SEC));fflush(stdout);\
 } while (0)
 
 
@@ -102,7 +102,7 @@ static int lfails = 0;
     ++ltests;\
     if (!(test)) {\
         ++lfails;\
-        printf("%s:%d error \n", __FILE__, __LINE__);\
+        printf("%s:%d error \n", __FILE__, __LINE__);fflush(stdout);\
     }} while (0)
 
 
@@ -111,7 +111,7 @@ static int lfails = 0;
     ++ltests;\
     if ((a) != (b)) {\
         ++lfails;\
-        printf("%s:%d (%d != %d)\n", __FILE__, __LINE__, (a), (b));\
+        printf("%s:%d (%d != %d)\n", __FILE__, __LINE__, (a), (b));fflush(stdout);\
     }} while (0)
 
 
@@ -121,7 +121,7 @@ static int lfails = 0;
     const double __LF_COMPARE = fabs((double)(a)-(double)(b));\
     if (__LF_COMPARE > LTEST_FLOAT_TOLERANCE || (__LF_COMPARE != __LF_COMPARE)) {\
         ++lfails;\
-        printf("%s:%d (%f != %f)\n", __FILE__, __LINE__, (double)(a), (double)(b));\
+        printf("%s:%d (%f != %f)\n", __FILE__, __LINE__, (double)(a), (double)(b));fflush(stdout);\
     }} while (0)
 
 
