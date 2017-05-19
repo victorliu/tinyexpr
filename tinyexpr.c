@@ -50,11 +50,17 @@ For log = natural log uncomment the next line. */
 #endif
 
 
-typedef struct te_expression {
+typedef struct te_expr {
 	int type;
 	union {double value; int ivar; const void *function;};
 	void *parameters[1];
 } te_expr;
+
+typedef struct te_expression {
+	te_expr *root;
+	int nvar;
+	int idx[1];
+} te_expression;
 
 typedef double (*te_fun2)(void *, const double *, double *);
 
@@ -89,7 +95,7 @@ typedef struct state {
 static te_expr *new_expr(const int type, const te_expr *parameters[]) {
 	const int arity = ARITY(type);
 	const int psize = sizeof(void*) * arity;
-	const int size = (sizeof(te_expr) - sizeof(void*)) + psize + (sizeof(void*));
+	const int size = sizeof(te_expr) + psize;
 	te_expr *ret = malloc(size);
 	memset(ret, 0, size);
 	if (arity && parameters) {
@@ -100,23 +106,29 @@ static te_expr *new_expr(const int type, const te_expr *parameters[]) {
 	return ret;
 }
 
-
+static void te_free2(te_expr *n);
 void te_free_parameters(te_expr *n) {
 	if (!n) return;
 	switch (TYPE_MASK(n->type)) {
-		case TE_FUNCTION7: te_free(n->parameters[6]);
-		case TE_FUNCTION6: te_free(n->parameters[5]);
-		case TE_FUNCTION5: te_free(n->parameters[4]);
-		case TE_FUNCTION4: te_free(n->parameters[3]);
-		case TE_FUNCTION3: te_free(n->parameters[2]);
-		case TE_FUNCTION2: te_free(n->parameters[1]);
-		case TE_FUNCTION1: te_free(n->parameters[0]);
+		case TE_FUNCTION7: te_free2(n->parameters[6]);
+		case TE_FUNCTION6: te_free2(n->parameters[5]);
+		case TE_FUNCTION5: te_free2(n->parameters[4]);
+		case TE_FUNCTION4: te_free2(n->parameters[3]);
+		case TE_FUNCTION3: te_free2(n->parameters[2]);
+		case TE_FUNCTION2: te_free2(n->parameters[1]);
+		case TE_FUNCTION1: te_free2(n->parameters[0]);
 	}
 }
 
-void te_free(te_expr *n) {
+static void te_free2(te_expr *n) {
 	te_free_parameters(n);
 	free(n);
+}
+
+void te_free(te_expression *expr) {
+	if (!expr) return;
+	te_free2(expr->root);
+	free(expr);
 }
 
 
@@ -166,46 +178,48 @@ static double random(){
 #define WRAP_CFUN2(name) static double WRAP_NAME(name) (void *p, const double *x){ return name(x[0], x[1]); }
 
 static double te_wrapped_fabs(void *p, const double *x, double *g){
-	return fabs(x[0]);
+	if(x[0] == 0){ g[0] = 0; return 0; }
+	if(x[0] < 0){ g[0] = -1; return -x[0]; }
+	g[0] = 1; return x[0];
 }
 static double te_wrapped_acos(void *p, const double *x, double *g){
-	/*g[0] = -1./sqrt(1-x[0]*x[0]);*/ return acos(x[0]);
+	g[0] = -1./sqrt(1-x[0]*x[0]); return acos(x[0]);
 }
 static double te_wrapped_asin(void *p, const double *x, double *g){
-	/*g[0] = 1./sqrt(1-x[0]*x[0]);*/ return asin(x[0]);
+	g[0] = 1./sqrt(1-x[0]*x[0]); return asin(x[0]);
 }
 static double te_wrapped_atan(void *p, const double *x, double *g){
-	/*g[0] = 1./(1+x[0]*x[0]);*/ return atan(x[0]);
+	g[0] = 1./(1+x[0]*x[0]); return atan(x[0]);
 }
 static double te_wrapped_atan2(void *p, const double *x, double *g){
 	double d = 1./(x[0]*x[0] + x[1]*x[1]);
-	/*g[0] = x[0]*d; g[1] = -x[1]*d;*/ return atan2(x[0], x[1]);
+	g[0] = x[0]*d; g[1] = -x[1]*d; return atan2(x[0], x[1]);
 }
 static double te_wrapped_ceil(void *p, const double *x, double *g){
 	return ceil(x[0]);
 }
 static double te_wrapped_cos(void *p, const double *x, double *g){
-	/*g[0] = -sin(x[0]);*/ return cos(x[0]);
+	g[0] = -sin(x[0]); return cos(x[0]);
 }
 static double te_wrapped_cosh(void *p, const double *x, double *g){
-	/*g[0] = sinh(x[0]);*/ return cosh(x[0]);
+	g[0] = sinh(x[0]); return cosh(x[0]);
 }
 static double te_wrapped_exp(void *p, const double *x, double *g){
 	double e = exp(x[0]);
-	/*g[0] = e;*/ return e;
+	g[0] = e; return e;
 }
 static double te_wrapped_floor(void *p, const double *x, double *g){
 	return floor(x[0]);
 }
 static double te_wrapped_fmod(void *p, const double *x, double *g){
 	double r = fmod(x[0], x[1]);
-	/*g[0] = 1; g[1] = -r;*/ return r;
+	g[0] = 1; g[1] = -r; return r;
 }
 static double te_wrapped_log(void *p, const double *x, double *g){
-	/*g[0] = 1./x[0];*/ return log(x[0]);
+	g[0] = 1./x[0]; return log(x[0]);
 }
 static double te_wrapped_log10(void *p, const double *x, double *g){
-	/*g[0] = 1./(log(10.)*x[0]);*/ return log10(x[0]);
+	g[0] = 1./(log(10.)*x[0]); return log10(x[0]);
 }
 static double te_wrapped_ncr(void *p, const double *x, double *g){
 	return ncr(x[0], x[1]);
@@ -215,7 +229,7 @@ static double te_wrapped_npr(void *p, const double *x, double *g){
 }
 static double te_wrapped_pow(void *p, const double *x, double *g){
 	double r = pow(x[0], x[1]);
-	/*g[0] = x[1]/x[0]*r; g[1] = r*log(x[0]);*/ return r;
+	g[0] = x[1]/x[0]*r; g[1] = r*log(x[0]); return r;
 }
 static double te_wrapped_random(void *p, const double *x, double *g){
 	return random();
@@ -224,22 +238,22 @@ static double te_wrapped_myround(void *p, const double *x, double *g){
 	return myround(x[0]);
 }
 static double te_wrapped_sin(void *p, const double *x, double *g){
-	/*g[0] = cos(x[0]);*/ return sin(x[0]);
+	g[0] = cos(x[0]); return sin(x[0]);
 }
 static double te_wrapped_sinh(void *p, const double *x, double *g){
-	/*g[0] = cosh(x[0]);*/ return sinh(x[0]);
+	g[0] = cosh(x[0]); return sinh(x[0]);
 }
 static double te_wrapped_sqrt(void *p, const double *x, double *g){
 	double r = sqrt(x[0]);
-	/*g[0] = 0.5/r;*/ return r;
+	g[0] = 0.5/r; return r;
 }
 static double te_wrapped_tan(void *p, const double *x, double *g){
 	double c = cos(x[0]);
-	/*g[0] = 1./(c*c);*/ return tan(x[0]);
+	g[0] = 1./(c*c); return tan(x[0]);
 }
 static double te_wrapped_tanh(void *p, const double *x, double *g){
 	double c = cosh(x[0]);
-	/*g[0] = 1./(c*c);*/ return tanh(x[0]);
+	g[0] = 1./(c*c); return tanh(x[0]);
 }
 
 static const te_variable functions[] = {
@@ -312,12 +326,12 @@ static const te_variable *find_lookup(const state *s, const char *name, int len)
 
 
 
-static double add(void *p, const double *x, double *g) {return x[0] + x[1];}
-static double sub(void *p, const double *x, double *g) {return x[0] - x[1];}
-static double mul(void *p, const double *x, double *g) {return x[0] * x[1];}
-static double divide(void *p, const double *x, double *g) {double r = 1./x[1]; return x[0]*r;}
-static double negate(void *p, const double *x, double *g) {return -x[0];}
-static double comma(void *p, const double *x, double *g) {return x[1];}
+static double add(void *p, const double *x, double *g) {g[0] = 1; g[1] = 1; return x[0] + x[1];}
+static double sub(void *p, const double *x, double *g) {g[0] = 1; g[1] = -1; return x[0] - x[1];}
+static double mul(void *p, const double *x, double *g) {g[0] = x[1]; g[1] = x[0]; return x[0] * x[1];}
+static double divide(void *p, const double *x, double *g) {double r = 1./x[1]; g[0] = r; g[1] = -x[0]*r*r; return x[0]*r;}
+static double negate(void *p, const double *x, double *g) {g[0] = -1; return -x[0];}
+static double comma(void *p, const double *x, double *g) {g[0] = 0; g[1] = 1; return x[1];}
 
 
 void next_token(state *s) {
@@ -602,11 +616,11 @@ static te_expr *list(state *s) {
 #define TE_FUN ((double(*)(void *, const double *))n->function)
 #define M(e) te_eval(n->parameters[e], val)
 
-double te_eval(const te_expr *n, const double *val, double *g) {
+double te_eval2(const te_expression *expr, const te_expr *n, const double *val, double *g) {
 	if (!n) return NAN;
 	switch(TYPE_MASK(n->type)) {
 		case TE_CONSTANT: return n->value;
-		case TE_VARIABLE: /* g[expr->idx[n->ivar]] = 1;*/ return val[n->ivar];
+		case TE_VARIABLE: g[expr->idx[n->ivar]] = 1; return val[n->ivar];
 		
 		case TE_FUNCTION0: case TE_FUNCTION1: case TE_FUNCTION2: case TE_FUNCTION3:
 		case TE_FUNCTION4: case TE_FUNCTION5: case TE_FUNCTION6: case TE_FUNCTION7:
@@ -614,28 +628,39 @@ double te_eval(const te_expr *n, const double *val, double *g) {
 			int m = ARITY(n->type);
 			int i, j;
 			double x[7];
+			double df[7] = { 0 };
+			double *work = alloca(sizeof(double) * m * expr->nvar);
+			double *g1 = work;
 			for(i = 0; i < m; ++i){
-				x[i] = te_eval(n->parameters[i], val, NULL);
+				for(j = 0; j < expr->nvar; ++j){ g1[j] = 0; }
+				x[i] = te_eval2(expr, n->parameters[i], val, g1);
+				g1 += expr->nvar;
 			}
-			double r = ((double(*)(void *, const double *, double *))n->function)(n->parameters[m], x, NULL);/*
+			double r = ((double(*)(void *, const double *, double *))n->function)(n->parameters[m], x, df);
 			for(j = 0; j < expr->nvar; ++j){ g[j] = 0; }
+			g1 = work;
 			for(i = 0; i < m; ++i){
-				for(j = 0; j < expr->nvar; ++j){
-					g[j] += df[i]*g1[j];
+				if(0 != df[i]){
+					for(j = 0; j < expr->nvar; ++j){
+						g[j] += df[i]*g1[j];
+					}
 				}
 				g1 += expr->nvar;
-			}*/
+			}
 			return r;
 		}
 
 		default: return NAN;
 	}
 }
+double te_eval(const te_expression *expr, const double *val, double *g) {
+	return te_eval2(expr, expr->root, val, g);
+}
 
 #undef TE_FUN
 #undef M
 
-static void optimize(te_expr *n) {
+static void optimize(te_expression *expr, te_expr *n) {
 	/* Evaluates as much as possible. */
 	if (n->type == TE_CONSTANT) return;
 	if (n->type == TE_VARIABLE) return;
@@ -646,14 +671,14 @@ static void optimize(te_expr *n) {
 		int known = 1;
 		int i;
 		for (i = 0; i < arity; ++i) {
-			optimize(n->parameters[i]);
+			optimize(expr, n->parameters[i]);
 			if (((te_expr*)(n->parameters[i]))->type != TE_CONSTANT) {
 				known = 0;
 			}
 		}
 		if (known) {
-			const double value = te_eval(n, NULL, NULL);
-printf("value = %f\n", value); fflush(stdout);
+			double *work = alloca(sizeof(double) * arity * expr->nvar);
+			const double value = te_eval2(expr, n, NULL, work);
 			te_free_parameters(n);
 			n->type = TE_CONSTANT;
 			n->value = value;
@@ -662,7 +687,7 @@ printf("value = %f\n", value); fflush(stdout);
 }
 
 
-te_expr *te_compile(const char *expression, int var_count, const te_variable *variables, int *error) {
+te_expression *te_compile(const char *expression, int var_count, const te_variable *variables, int *error) {
 	state s;
 	s.start = s.next = expression;
 	s.lookup = variables;
@@ -672,7 +697,7 @@ te_expr *te_compile(const char *expression, int var_count, const te_variable *va
 	te_expr *root = list(&s);
 
 	if (s.type != TOK_END) {
-		te_free(root);
+		te_free2(root);
 		if (error) {
 			*error = (s.next - s.start);
 			if (*error == 0) *error = 1;
@@ -680,7 +705,22 @@ te_expr *te_compile(const char *expression, int var_count, const te_variable *va
 		return NULL;
 	}
 	if (error) *error = 0;
-	return root;
+	
+	te_expression *ret = malloc(sizeof(te_expression) + sizeof(int)*(var_count-1));
+	ret->root = root;
+	ret->nvar = 0;
+	{
+		int i;
+		for(i = 0; i < var_count; ++i){
+			if(TE_VARIABLE == variables[i].type){
+				ret->idx[i] = ret->nvar++;
+			}else{
+				ret->idx[i] = 0;
+			}
+		}
+	}
+	optimize(ret, root);
+	return ret;
 }
 
 static void pn (const te_expr *n, int depth) {
@@ -707,6 +747,6 @@ static void pn (const te_expr *n, int depth) {
 }
 
 
-void te_print(const te_expr *n) {
-	pn(n, 0);
+void te_print(const te_expression *n) {
+	pn(n->root, 0);
 }
