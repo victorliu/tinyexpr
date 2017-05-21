@@ -41,16 +41,16 @@ enum {
     TE_FLAG_PURE = 32
 };
 
-typedef struct te_variable {
+struct te_variable {
     const char *name;
     const void *address;
     int type;
     void *context;
-} te_variable;
+};
 
 /* Parses the input expression and binds variables. */
 /* Returns NULL on error. */
-struct te_expression *te_compile(const char *expression, int var_count, const te_variable *variables, int *error);
+struct te_expression *te_compile(const char *expression, int var_count, const struct te_variable *variables, int *error);
 
 /* Evaluates the expression. */
 double te_eval(const struct te_expression *n, const double *val, double *g);

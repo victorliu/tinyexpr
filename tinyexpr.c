@@ -80,7 +80,7 @@ typedef struct state {
 	union {double value; int ivar; const void *function;};
 	void *context;
 
-	const te_variable *lookup;
+	const struct te_variable *lookup;
 	int lookup_len;
 } state;
 
@@ -107,7 +107,7 @@ static te_expr *new_expr(const int type, const te_expr *parameters[]) {
 }
 
 static void te_free2(te_expr *n);
-void te_free_parameters(te_expr *n) {
+static void te_free_parameters(te_expr *n) {
 	if (!n) return;
 	switch (TYPE_MASK(n->type)) {
 		case TE_FUNCTION7: te_free2(n->parameters[6]);
@@ -164,18 +164,13 @@ static double ncr(double n, double r) {
 }
 static double npr(double n, double r) {return ncr(n, r) * fac(r);}
 static double myround(double x) {return floor(x+0.5);}
-static double random(){
+static double myrandom(){
 	static const double nrm = 1./(1.+(double)RAND_MAX);
 	double f = nrm*rand();
 	double f1 = nrm*rand();
 	double f2= nrm*rand();
 	return f+nrm*(f1+nrm*f2);
 }
-
-#define WRAP_NAME(name) te_wrapped_ ## name
-#define WRAP_CFUN0(name) static double WRAP_NAME(name) (void *p, const double *x){ return name(); }
-#define WRAP_CFUN1(name) static double WRAP_NAME(name) (void *p, const double *x){ return name(x[0]); }
-#define WRAP_CFUN2(name) static double WRAP_NAME(name) (void *p, const double *x){ return name(x[0], x[1]); }
 
 static double te_wrapped_fabs(void *p, const double *x, double *g){
 	if(x[0] == 0){ g[0] = 0; return 0; }
@@ -232,10 +227,15 @@ static double te_wrapped_pow(void *p, const double *x, double *g){
 	g[0] = x[1]/x[0]*r; g[1] = r*log(x[0]); return r;
 }
 static double te_wrapped_random(void *p, const double *x, double *g){
-	return random();
+	return myrandom();
 }
 static double te_wrapped_myround(void *p, const double *x, double *g){
 	return myround(x[0]);
+}
+static double te_wrapped_sign(void *p, const double *x, double *g){
+	if(0 == x[0]){ return 0; }
+	if(x[0] > 0){ return 1; }
+	return -1;
 }
 static double te_wrapped_sin(void *p, const double *x, double *g){
 	g[0] = cos(x[0]); return sin(x[0]);
@@ -256,44 +256,45 @@ static double te_wrapped_tanh(void *p, const double *x, double *g){
 	g[0] = 1./(c*c); return tanh(x[0]);
 }
 
-static const te_variable functions[] = {
+static const struct te_variable functions[] = {
 	/* must be in alphabetical order */
-	{"abs", WRAP_NAME(fabs),     TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"acos", WRAP_NAME(acos),    TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"asin", WRAP_NAME(asin),    TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"atan", WRAP_NAME(atan),    TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"atan2", WRAP_NAME(atan2),  TE_FUNCTION2 | TE_FLAG_PURE, 0},
-	{"ceil", WRAP_NAME(ceil),    TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"cos", WRAP_NAME(cos),      TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"cosh", WRAP_NAME(cosh),    TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"e", e,                     TE_FUNCTION0 | TE_FLAG_PURE, 0},
-	{"exp", WRAP_NAME(exp),      TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"fac", fac,                 TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"floor", WRAP_NAME(floor),  TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"ln", WRAP_NAME(log),       TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"abs"   , te_wrapped_fabs,    TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"acos"  , te_wrapped_acos,    TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"asin"  , te_wrapped_asin,    TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"atan"  , te_wrapped_atan,    TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"atan2" , te_wrapped_atan2,   TE_FUNCTION2 | TE_FLAG_PURE, 0},
+	{"ceil"  , te_wrapped_ceil,    TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"cos"   , te_wrapped_cos,     TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"cosh"  , te_wrapped_cosh,    TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"e"     , e,                  TE_FUNCTION0 | TE_FLAG_PURE, 0},
+	{"exp"   , te_wrapped_exp,     TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"fac"   , fac,                TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"floor" , te_wrapped_floor,   TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"ln"    , te_wrapped_log,     TE_FUNCTION1 | TE_FLAG_PURE, 0},
 #ifdef TE_NAT_LOG
-	{"log", WRAP_NAME(log),      TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"log"   , te_wrapped_log,     TE_FUNCTION1 | TE_FLAG_PURE, 0},
 #else
-	{"log", WRAP_NAME(log10),    TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"log"   , te_wrapped_log10,   TE_FUNCTION1 | TE_FLAG_PURE, 0},
 #endif
-	{"log10", WRAP_NAME(log10),  TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"ncr", WRAP_NAME(ncr),      TE_FUNCTION2 | TE_FLAG_PURE, 0},
-	{"npr", WRAP_NAME(npr),      TE_FUNCTION2 | TE_FLAG_PURE, 0},
-	{"pi", pi,                   TE_FUNCTION0 | TE_FLAG_PURE, 0},
-	{"pow", WRAP_NAME(pow),      TE_FUNCTION2 | TE_FLAG_PURE, 0},
-	{"random", WRAP_NAME(random),TE_FUNCTION0 | TE_FLAG_PURE, 0},
-	{"round", WRAP_NAME(myround),TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"sin", WRAP_NAME(sin),      TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"sinh", WRAP_NAME(sinh),    TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"sqrt", WRAP_NAME(sqrt),    TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"tan", WRAP_NAME(tan),      TE_FUNCTION1 | TE_FLAG_PURE, 0},
-	{"tanh", WRAP_NAME(tanh),    TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"log10" , te_wrapped_log10,   TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"ncr"   , te_wrapped_ncr,     TE_FUNCTION2 | TE_FLAG_PURE, 0},
+	{"npr"   , te_wrapped_npr,     TE_FUNCTION2 | TE_FLAG_PURE, 0},
+	{"pi"    , pi,                 TE_FUNCTION0 | TE_FLAG_PURE, 0},
+	{"pow"   , te_wrapped_pow,     TE_FUNCTION2 | TE_FLAG_PURE, 0},
+	{"random", te_wrapped_random,  TE_FUNCTION0 | TE_FLAG_PURE, 0},
+	{"round" , te_wrapped_myround, TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"sign"  , te_wrapped_sign,    TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"sin"   , te_wrapped_sin,     TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"sinh"  , te_wrapped_sinh,    TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"sqrt"  , te_wrapped_sqrt,    TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"tan"   , te_wrapped_tan,     TE_FUNCTION1 | TE_FLAG_PURE, 0},
+	{"tanh"  , te_wrapped_tanh,    TE_FUNCTION1 | TE_FLAG_PURE, 0},
 	{0, 0, 0, 0}
 };
 
-static const te_variable *find_builtin(const char *name, int len) {
+static const struct te_variable *find_builtin(const char *name, int len) {
 	int imin = 0;
-	int imax = sizeof(functions) / sizeof(te_variable) - 2;
+	int imax = sizeof(functions) / sizeof(struct te_variable) - 2;
 
 	/*Binary search.*/
 	while (imax >= imin) {
@@ -312,9 +313,9 @@ static const te_variable *find_builtin(const char *name, int len) {
 	return 0;
 }
 
-static const te_variable *find_lookup(const state *s, const char *name, int len) {
+static const struct te_variable *find_lookup(const state *s, const char *name, int len) {
 	int iters;
-	const te_variable *var;
+	const struct te_variable *var;
 	if (!s->lookup) return NULL;
 	for (var = s->lookup, iters = s->lookup_len; iters; ++var, --iters) {
 		if (strncmp(name, var->name, len) == 0 && var->name[len] == '\0') {
@@ -333,8 +334,7 @@ static double divide(void *p, const double *x, double *g) {double r = 1./x[1]; g
 static double negate(void *p, const double *x, double *g) {g[0] = -1; return -x[0];}
 static double comma(void *p, const double *x, double *g) {g[0] = 0; g[1] = 1; return x[1];}
 
-
-void next_token(state *s) {
+static void next_token(state *s) {
 	s->type = TOK_NULL;
 
 	do {
@@ -355,7 +355,7 @@ void next_token(state *s) {
 				start = s->next;
 				while ((s->next[0] >= 'a' && s->next[0] <= 'z') || (s->next[0] >= '0' && s->next[0] <= '9') || (s->next[0] == '_')) s->next++;
 
-				const te_variable *var = find_lookup(s, start, s->next - start);
+				const struct te_variable *var = find_lookup(s, start, s->next - start);
 				if (!var) var = find_builtin(start, s->next - start);
 
 				if (!var) {
@@ -383,8 +383,8 @@ void next_token(state *s) {
 					case '-': s->type = TOK_INFIX; s->function = sub; break;
 					case '*': s->type = TOK_INFIX; s->function = mul; break;
 					case '/': s->type = TOK_INFIX; s->function = divide; break;
-					case '^': s->type = TOK_INFIX; s->function = WRAP_NAME(pow); break;
-					case '%': s->type = TOK_INFIX; s->function = WRAP_NAME(fmod); break;
+					case '^': s->type = TOK_INFIX; s->function = te_wrapped_pow; break;
+					case '%': s->type = TOK_INFIX; s->function = te_wrapped_fmod; break;
 					case '(': s->type = TOK_OPEN; break;
 					case ')': s->type = TOK_CLOSE; break;
 					case ',': s->type = TOK_SEP; break;
@@ -527,7 +527,7 @@ static te_expr *factor(state *s) {
 		neg = 1;
 	}
 
-	while (s->type == TOK_INFIX && (s->function == WRAP_NAME(pow))) {
+	while (s->type == TOK_INFIX && (s->function == te_wrapped_pow)) {
 		te_fun2 t = s->function;
 		next_token(s);
 
@@ -556,7 +556,7 @@ static te_expr *factor(state *s) {
 	/* <factor>    =    <power> {"^" <power>} */
 	te_expr *ret = power(s);
 
-	while (s->type == TOK_INFIX && (s->function == WRAP_NAME(pow))) {
+	while (s->type == TOK_INFIX && (s->function == te_wrapped_pow)) {
 		te_fun2 t = s->function;
 		next_token(s);
 		ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, power(s));
@@ -573,7 +573,7 @@ static te_expr *term(state *s) {
 	/* <term>      =    <factor> {("*" | "/" | "%") <factor>} */
 	te_expr *ret = factor(s);
 
-	while (s->type == TOK_INFIX && (s->function == mul || s->function == divide || s->function == WRAP_NAME(fmod))) {
+	while (s->type == TOK_INFIX && (s->function == mul || s->function == divide || s->function == te_wrapped_fmod)) {
 		te_fun2 t = s->function;
 		next_token(s);
 		ret = NEW_EXPR(TE_FUNCTION2 | TE_FLAG_PURE, ret, factor(s));
@@ -616,7 +616,7 @@ static te_expr *list(state *s) {
 #define TE_FUN ((double(*)(void *, const double *))n->function)
 #define M(e) te_eval(n->parameters[e], val)
 
-double te_eval2(const te_expression *expr, const te_expr *n, const double *val, double *g) {
+static double te_eval2(const te_expression *expr, const te_expr *n, const double *val, double *g) {
 	if (!n) return NAN;
 	switch(TYPE_MASK(n->type)) {
 		case TE_CONSTANT: return n->value;
@@ -687,7 +687,7 @@ static void optimize(te_expression *expr, te_expr *n) {
 }
 
 
-te_expression *te_compile(const char *expression, int var_count, const te_variable *variables, int *error) {
+te_expression *te_compile(const char *expression, int var_count, const struct te_variable *variables, int *error) {
 	state s;
 	s.start = s.next = expression;
 	s.lookup = variables;

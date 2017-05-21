@@ -13,7 +13,7 @@ int main(int argc, char *argv[])
 
     /* This shows an example where the variables
      * x and y are bound at eval-time. */
-    te_variable vars[] = {{"x"}, {"y"}};
+    struct te_variable vars[] = {{"x"}, {"y"}};
 
     /* This will compile the expression and check for errors. */
     int err;

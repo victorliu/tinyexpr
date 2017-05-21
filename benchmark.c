@@ -38,10 +38,10 @@ typedef double (*function1)(double);
 void bench(const char *expr, function1 func) {
     int i, j;
     volatile double d;
-    double tmp;
+    double tmp, g;
     clock_t start;
 
-    te_variable lk = {"a", &tmp};
+    struct te_variable lk = {"a"};
 
     printf("Expression: %s\n", expr);
 
@@ -66,13 +66,13 @@ void bench(const char *expr, function1 func) {
 
 
     printf("interp ");
-    te_expr *n = te_compile(expr, &lk, 1, 0);
+    struct te_expression *n = te_compile(expr, 1, &lk, 0);
     start = clock();
     d = 0;
     for (j = 0; j < loops; ++j)
         for (i = 0; i < loops; ++i) {
             tmp = i;
-            d += te_eval(n);
+            d += te_eval(n, &tmp, &g);
         }
     const int eelapsed = (clock() - start) * 1000 / CLOCKS_PER_SEC;
     te_free(n);

@@ -284,7 +284,7 @@ void test_infs() {
 
 
 void test_variables() {
-	const te_variable vars[] = { {"x"}, {"y"}, {"te_st"} };
+	const struct te_variable vars[] = { {"x"}, {"y"}, {"te_st"} };
     double x, y, test = 0;
     double g[3];
 
@@ -365,7 +365,7 @@ void test_variables() {
 }while(0)
 
 void test_functions() {
-	const te_variable vars[] = { {"x"}, {"y"} };
+	const struct te_variable vars[] = { {"x"}, {"y"} };
     double val[2], g[2];
 
     int err;
@@ -427,7 +427,7 @@ double sum7(void *p, const double *x) {
 void test_dynamic() {
 
     double val[2], g[2];
-    te_variable lookup[] = {
+    struct te_variable lookup[] = {
         {"x"},
         {"f"},
         {"sum0", sum0, TE_FUNCTION0},
@@ -474,7 +474,7 @@ void test_dynamic() {
         const double answer = cases[i].answer;
 
         int err;
-        struct te_expression *ex = te_compile(expr, sizeof(lookup)/sizeof(te_variable), lookup, &err);
+        struct te_expression *ex = te_compile(expr, sizeof(lookup)/sizeof(struct te_variable), lookup, &err);
         lok(ex);
         lfequal(te_eval(ex, val, g), answer);
         te_free(ex);
@@ -505,7 +505,7 @@ void test_closure() {
     double extra;
     double c[] = {5,6,7,8,9};
 
-    te_variable lookup[] = {
+    struct te_variable lookup[] = {
         {"c0", clo0, TE_FUNCTION0, &extra},
         {"c1", clo1, TE_FUNCTION1, &extra},
         {"c2", clo2, TE_FUNCTION2, &extra},
@@ -524,7 +524,7 @@ void test_closure() {
         const double answer = cases[i].answer;
 
         int err;
-        struct te_expression *ex = te_compile(expr, sizeof(lookup)/sizeof(te_variable), lookup, &err);
+        struct te_expression *ex = te_compile(expr, sizeof(lookup)/sizeof(struct te_variable), lookup, &err);
         lok(ex);
 
         extra = 0;
@@ -549,7 +549,7 @@ void test_closure() {
         const double answer = cases2[i].answer;
 
         int err;
-        struct te_expression *ex = te_compile(expr, sizeof(lookup)/sizeof(te_variable), lookup, &err);
+        struct te_expression *ex = te_compile(expr, sizeof(lookup)/sizeof(struct te_variable), lookup, &err);
         lok(ex);
         lfequal(te_eval(ex, NULL, NULL), answer);
         te_free(ex);
@@ -612,7 +612,7 @@ void test_pow() {
 	double val[2] = { 2, 3 };
 	double g[2];
 
-    te_variable lookup[] = {
+    struct te_variable lookup[] = {
         {"a"},
         {"b"}
     };
@@ -622,8 +622,8 @@ void test_pow() {
         const char *expr1 = cases[i].expr1;
         const char *expr2 = cases[i].expr2;
 
-        struct te_expression *ex1 = te_compile(expr1, sizeof(lookup)/sizeof(te_variable), lookup, 0);
-        struct te_expression *ex2 = te_compile(expr2, sizeof(lookup)/sizeof(te_variable), lookup, 0);
+        struct te_expression *ex1 = te_compile(expr1, sizeof(lookup)/sizeof(struct te_variable), lookup, 0);
+        struct te_expression *ex2 = te_compile(expr2, sizeof(lookup)/sizeof(struct te_variable), lookup, 0);
 
         lok(ex1);
         lok(ex2);

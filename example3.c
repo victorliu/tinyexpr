@@ -3,15 +3,16 @@
 
 
 /* An example of calling a C function. */
-double my_sum(double a, double b) {
-    printf("Called C function with %f and %f.\n", a, b);
-    return a + b;
+double my_sum(void *ctx, double *ab, double *g) {
+    printf("Called C function with %f and %f.\n", ab[0], ab[1]);
+	g[0] = 1; g[1] = 1;
+    return ab[0] + ab[1];
 }
 
 
 int main(int argc, char *argv[])
 {
-    te_variable vars[] = {
+   struct te_variable vars[] = {
         {"mysum", my_sum, TE_FUNCTION2}
     };
 
@@ -19,10 +20,10 @@ int main(int argc, char *argv[])
     printf("Evaluating:\n\t%s\n", expression);
 
     int err;
-    te_expr *n = te_compile(expression, vars, 1, &err);
+    struct te_expression *n = te_compile(expression, 1, vars, &err);
 
     if (n) {
-        const double r = te_eval(n);
+        const double r = te_eval(n, NULL, NULL);
         printf("Result:\n\t%f\n", r);
         te_free(n);
     } else {
