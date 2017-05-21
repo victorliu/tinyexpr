@@ -30,85 +30,55 @@ the standard C math functions and runtime binding of variables.
 TinyExpr is self-contained in two files: `tinyexpr.c` and `tinyexpr.h`. To use
 TinyExpr, simply add those two files to your project.
 
-## Short Example
-
-Here is a minimal example to evaluate an expression at runtime.
-
-```C
-    #include "tinyexpr.h"
-    printf("%f\n", te_interp("5*5", 0)); /* Prints 25. */
-```
-
 
 ## Usage
 
-TinyExpr defines only four functions:
+TinyExpr defines only three functions:
 
 ```C
-    double te_interp(const char *expression, int *error);
-    te_expr *te_compile(const char *expression, const te_variable *variables, int var_count, int *error);
-    double te_eval(const te_expr *expr);
-    void te_free(te_expr *expr);
-```
-
-## te_interp
-```C
-    double te_interp(const char *expression, int *error);
-```
-
-`te_interp()` takes an expression and immediately returns the result of it. If there
-is a parse error, `te_interp()` returns NaN.
-
-If the `error` pointer argument is not 0, then `te_interp()` will set `*error` to the position
-of the parse error on failure, and set `*error` to 0 on success.
-
-**example usage:**
-
-```C
-    int error;
-
-    double a = te_interp("(5+5)", 0); /* Returns 10. */
-    double b = te_interp("(5+5)", &error); /* Returns 10, error is set to 0. */
-    double c = te_interp("(5+5", &error); /* Returns NaN, error is set to 4. */
+    struct te_expression *te_compile(const char *expression, int nvars const te_variable *var, int *error);
+    double te_eval(const struct te_expression *expr, const double *val, double *grad);
+    void te_free(struct te_expression *expr);
 ```
 
 ## te_compile, te_eval, te_free
 ```C
-    te_expr *te_compile(const char *expression, const te_variable *lookup, int lookup_len, int *error);
-    double te_eval(const te_expr *n);
-    void te_free(te_expr *n);
+    struct te_expression *te_compile(const char *expression, int nlookup, const struct te_variable *lookup, int *error);
+    double te_eval(const struct te_expression *n, const double *val, double *grad);
+    void te_free(struct te_expression *n);
 ```
 
 Give `te_compile()` an expression with unbound variables and a list of
-variable names and pointers. `te_compile()` will return a `te_expr*` which can
+variable names and pointers. `te_compile()` will return a `struct te_expression*` which can
 be evaluated later using `te_eval()`. On failure, `te_compile()` will return 0
 and optionally set the passed in `*error` to the location of the parse error.
 
 You may also compile expressions without variables by passing `te_compile()`'s second
-and thrid arguments as 0.
+and third arguments as 0.
 
-Give `te_eval()` a `te_expr*` from `te_compile()`. `te_eval()` will evaluate the expression
-using the current variable values.
+Give `te_eval()` a `struct te_expression*` from `te_compile()`. `te_eval()` will evaluate the expression
+using the given vector of variable values (in the order as they were specified to `te_compile`).
+The gradient of expression with respect to each variable is returned in `grad`.
 
 After you're finished, make sure to call `te_free()`.
 
 **example usage:**
 
 ```C
-    double x, y;
+    double xy[2], grad[2];
     /* Store variable names and pointers. */
-    te_variable vars[] = {{"x", &x}, {"y", &y}};
+    struct te_variable vars[] = {{"x"}, {"y"}};
 
     int err;
     /* Compile the expression with variables. */
-    te_expr *expr = te_compile("sqrt(x^2+y^2)", vars, 2, &err);
+    struct te_expression *expr = te_compile("sqrt(x^2+y^2)", 2, vars, &err);
 
     if (expr) {
-        x = 3; y = 4;
-        const double h1 = te_eval(expr); /* Returns 5. */
+        xy[0] = 3; xy[1] = 4;
+        const double h1 = te_eval(expr, xy, grad); /* Returns 5. */
 
-        x = 5; y = 12;
-        const double h2 = te_eval(expr); /* Returns 13. */
+        xy[0] = 5; xy[1] = 12;
+        const double h2 = te_eval(expr, xy, grad); /* Returns 13. */
 
         te_free(expr);
     } else {
@@ -138,19 +108,21 @@ line. It also does error checking and binds the variables `x` and `y` to *3* and
 
         /* This shows an example where the variables
          * x and y are bound at eval-time. */
-        double x, y;
-        te_variable vars[] = {{"x", &x}, {"y", &y}};
+        double xy[2], grad[2];
+        struct te_variable vars[] = {{"x"}, {"y"}};
 
         /* This will compile the expression and check for errors. */
         int err;
-        te_expr *n = te_compile(expression, vars, 2, &err);
+        struct te_expression *n = te_compile(expression, 2, vars, &err);
 
         if (n) {
             /* The variables can be changed here, and eval can be called as many
              * times as you like. This is fairly efficient because the parsing has
              * already been done. */
-            x = 3; y = 4;
-            const double r = te_eval(n); printf("Result:\n\t%f\n", r);
+            xy[0] = 3; xy[1] = 4;
+            const double r = te_eval(n, xy, grad);
+            printf("Result:\n\t%f\n", r);
+            printf("Gradient:\n\t%f\t%f\n", grad[0], grad[1]);
             te_free(n);
         } else {
             /* Show the user where the error is at. */
@@ -176,6 +148,8 @@ This produces the output:
                 sqrt(x^2+y^2)
         Result:
                 5.000000
+        Gradient:
+                0.600000  0.800000
 
 
 ## Binding to Custom Functions
@@ -183,16 +157,17 @@ This produces the output:
 TinyExpr can also call to custom functions implemented in C. Here is a short example:
 
 ```C
-double my_sum(double a, double b) {
+double my_sum(void *ctx, double *x, double *g) {
     /* Example C function that adds two numbers together. */
-    return a + b;
+    g[0] = 1; g[1] = 1;
+    return x[0] + x[1];
 }
 
-te_variable vars[] = {
+struct te_variable vars[] = {
     {"mysum", my_sum, TE_FUNCTION2} /* TE_FUNCTION2 used because my_sum takes two arguments. */
 };
 
-te_expr *n = te_compile("mysum(5, 6)", vars, 1, 0);
+struct te_expression *n = te_compile("mysum(5, 6)", 1, vars, 0);
 
 ```
 
@@ -278,6 +253,9 @@ The following functions are also built-in and provided by TinyExpr:
 - fac (factorials e.g. `fac 5` == 120)
 - ncr (combinations e.g. `ncr(6,2)` == 15)
 - npr (permutations e.g. `npr(6,2)` == 30)
+- random (random() returns a random number in the half-open interval [0,1))
+- round (round(2.2) == 2)
+- sign (sign(0) == 0, sign(2.3) == 1, sign(-2.3) == -1)
 
 Also, the following constants are available:
 
